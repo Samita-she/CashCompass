@@ -1,0 +1,11 @@
+{
+  "Version": 1,
+  "Hash": "3VD2xcmWuY6s/dkDDayt8rkMm0Aa3hIBeHVwmJ6V5e8=",
+  "Source": "CashCompass.API",
+  "BasePath": "_content/CashCompass.API",
+  "Mode": "Default",
+  "ManifestType": "Build",
+  "ReferencedProjectsConfiguration": [],
+  "DiscoveryPatterns": [],
+  "Assets": []
+}
