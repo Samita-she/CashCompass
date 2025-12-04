@@ -1,8 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using CashCompass.API.Data;
-using CashCompass.API.Models;   // ⚡ Models for database
-using CashCompass.API.DTOs;     // ⚡ DTOs for API communication
+using CashCompass.API.Models;   
+using CashCompass.API.DTOs;    
 
 namespace CashCompass.API.Controllers
 {
@@ -88,9 +88,10 @@ namespace CashCompass.API.Controllers
                 ExpenseName = dto.ExpenseName,
                 Amount = dto.Amount,
                 CategoryId = dto.CategoryId,
+                UserId = dto.UserId,
                 ExpenseDate = dto.ExpenseDate,
                 Notes = dto.Notes,
-                CreatedAt = DateTime.UtcNow
+               
             };
 
             _context.Expenses.Add(expense);

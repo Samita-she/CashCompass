@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("CashCompass.API")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+86b11300a09475a51e2127fc876b5608ef196cfa")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+bce400b7b46060cc64f78fdd5744342e1e76a1a2")]
 [assembly: System.Reflection.AssemblyProductAttribute("CashCompass.API")]
 [assembly: System.Reflection.AssemblyTitleAttribute("CashCompass.API")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

@@ -1,12 +1,13 @@
 using System.ComponentModel.DataAnnotations.Schema;
 using System.ComponentModel.DataAnnotations;
+using System.Collections.Generic;
 
 namespace CashCompass.API.Models
 {
     [Table("IncomeSource")]  
     public class IncomeSource
     {
-        [Key] // 👈 THIS IS THE CRUCIAL, MISSING FIX
+        [Key] 
         public int IncomeId { get; set; } 
         
         public int UserId { get; set; }
@@ -18,8 +19,10 @@ namespace CashCompass.API.Models
         public DateTime NextPayDate { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+
+        public  User? User { get; set; }
+        public ICollection<Allocation> Allocations { get; set; } = new List<Allocation>();
         
-        // Navigation property (often required for EF Core relationships)
-        // public User User { get; set; } = null!; 
+        
     }
 }

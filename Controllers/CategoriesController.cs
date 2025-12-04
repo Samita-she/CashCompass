@@ -26,6 +26,7 @@ namespace CashCompass.API.Controllers
                 {
                     CategoryId = c.CategoryId,
                     CategoryName = c.CategoryName,
+                    Description = c.Description,
                     UserId = c.UserId
                 })
                 .ToListAsync();
@@ -43,7 +44,8 @@ namespace CashCompass.API.Controllers
                 {
                     CategoryId = c.CategoryId,
                     CategoryName = c.CategoryName,
-                    UserId = c.UserId
+                    UserId = c.UserId,
+                    Description = c.Description
                 })
                 .ToListAsync();
 
@@ -60,7 +62,8 @@ namespace CashCompass.API.Controllers
                 {
                     CategoryId = c.CategoryId,
                     CategoryName = c.CategoryName,
-                    UserId = c.UserId
+                    UserId = c.UserId,
+                    Description = c.Description
                 })
                 .FirstOrDefaultAsync();
 
@@ -75,7 +78,8 @@ namespace CashCompass.API.Controllers
             var category = new Category
             {
                 CategoryName = dto.CategoryName,
-                UserId = dto.UserId
+                UserId = dto.UserId,
+                Description = dto.Description ?? string.Empty
             };
 
             _context.Categories.Add(category);
@@ -85,7 +89,8 @@ namespace CashCompass.API.Controllers
             {
                 CategoryId = category.CategoryId,
                 CategoryName = category.CategoryName,
-                UserId = category.UserId
+                UserId = category.UserId,
+                Description = category.Description
             };
 
             return CreatedAtAction(nameof(GetCategory), new { id = category.CategoryId }, result);
@@ -99,6 +104,7 @@ namespace CashCompass.API.Controllers
             if (category == null) return NotFound();
 
             category.CategoryName = dto.CategoryName;
+            category.Description = dto.Description ?? category.Description;
 
             await _context.SaveChangesAsync();
 
@@ -106,7 +112,8 @@ namespace CashCompass.API.Controllers
             {
                 CategoryId = category.CategoryId,
                 CategoryName = category.CategoryName,
-                UserId = category.UserId
+                UserId = category.UserId,
+                Description = category.Description
             };
 
             return Ok(result);

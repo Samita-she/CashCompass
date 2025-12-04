@@ -1,9 +1,11 @@
 using Dapper;
 using System.Data;
-using HotChocolate;
-using HotChocolate.Types;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 using CashCompass.API.DTOs;
 using CashCompass.API.Models;
+using HotChocolate;
+using Npgsql; // Needed for PostgreSQL specific handling
 
 namespace CashCompass.API.GraphQL
 {
@@ -21,58 +23,65 @@ namespace CashCompass.API.GraphQL
         // ==============================
         public async Task<UserDto> CreateUser(string fullName, string email, string password)
         {
-            var sql = "EXEC CreateUser @FullName, @Email, @Password";
-            return await _db.QuerySingleAsync<UserDto>(sql, new { FullName = fullName, Email = email, Password = password });
+            // PostgreSQL often returns the created object directly from a function/procedure
+            // We use CommandType.StoredProcedure here, assuming the procedure/function exists
+            return await _db.QuerySingleAsync<UserDto>(
+                "create_user", // Name of the PostgreSQL stored function/procedure
+                new { FullName = fullName, Email = email, Password = password },
+                commandType: CommandType.StoredProcedure
+            );
         }
 
         public async Task<UserDto> UpdateUser(int userId, string fullName, string email)
         {
-            var sql = "EXEC UpdateUser @UserId, @FullName, @Email";
-            return await _db.QuerySingleAsync<UserDto>(sql, new { UserId = userId, FullName = fullName, Email = email });
+            return await _db.QuerySingleAsync<UserDto>(
+                "update_user",
+                new { UserId = userId, FullName = fullName, Email = email },
+                commandType: CommandType.StoredProcedure
+            );
         }
 
         public async Task<bool> DeleteUser(int userId)
         {
-            var sql = "EXEC DeleteUser @UserId";
-            await _db.ExecuteAsync(sql, new { UserId = userId });
+            // Use ExecuteAsync for operations that don't return an object
+            await _db.ExecuteAsync(
+                "delete_user",
+                new { UserId = userId },
+                commandType: CommandType.StoredProcedure
+            );
             return true;
         }
 
-        // Bulk update users
-        public async Task<bool> BulkUpdateUsers(List<int> userIds, bool isActive)
-        {
-            var table = new DataTable();
-            table.Columns.Add("Id", typeof(int));
-            foreach (var id in userIds)
-                table.Rows.Add(id);
-
-            var param = new DynamicParameters();
-            param.Add("@UserIds", table.AsTableValuedParameter("dbo.IntList"));
-            param.Add("@Status", isActive);
-
-            await _db.ExecuteAsync("BulkUpdateUserStatus", param, commandType: CommandType.StoredProcedure);
-            return true;
-        }
-
+        // ❌ BulkUpdateUsers REMOVED: Feature relies on SQL Server Table-Valued Parameters.
+        
         // ==============================
         // IncomeSources
         // ==============================
         public async Task<IncomeSource> CreateIncomeSource(int userId, string sourceName, decimal amount, string payFrequency, DateTime nextPayDate)
         {
-            var sql = "EXEC CreateIncomeSource @UserId, @SourceName, @Amount, @PayFrequency, @NextPayDate";
-            return await _db.QuerySingleAsync<IncomeSource>(sql, new { UserId = userId, SourceName = sourceName, Amount = amount, PayFrequency = payFrequency, NextPayDate = nextPayDate });
+            return await _db.QuerySingleAsync<IncomeSource>(
+                "create_income_source",
+                new { UserId = userId, SourceName = sourceName, Amount = amount, PayFrequency = payFrequency, NextPayDate = nextPayDate },
+                commandType: CommandType.StoredProcedure
+            );
         }
 
         public async Task<IncomeSource> UpdateIncomeSource(int incomeId, string sourceName, decimal amount, string payFrequency, DateTime nextPayDate)
         {
-            var sql = "EXEC UpdateIncomeSource @IncomeId, @SourceName, @Amount, @PayFrequency, @NextPayDate";
-            return await _db.QuerySingleAsync<IncomeSource>(sql, new { IncomeId = incomeId, SourceName = sourceName, Amount = amount, PayFrequency = payFrequency, NextPayDate = nextPayDate });
+            return await _db.QuerySingleAsync<IncomeSource>(
+                "update_income_source",
+                new { IncomeId = incomeId, SourceName = sourceName, Amount = amount, PayFrequency = payFrequency, NextPayDate = nextPayDate },
+                commandType: CommandType.StoredProcedure
+            );
         }
 
         public async Task<bool> DeleteIncomeSource(int incomeId)
         {
-            var sql = "EXEC DeleteIncomeSource @IncomeId";
-            await _db.ExecuteAsync(sql, new { IncomeId = incomeId });
+            await _db.ExecuteAsync(
+                "delete_income_source",
+                new { IncomeId = incomeId },
+                commandType: CommandType.StoredProcedure
+            );
             return true;
         }
 
@@ -81,20 +90,29 @@ namespace CashCompass.API.GraphQL
         // ==============================
         public async Task<Category> CreateCategory(int userId, string categoryName, string description)
         {
-            var sql = "EXEC CreateCategory @UserId, @CategoryName, @Description";
-            return await _db.QuerySingleAsync<Category>(sql, new { UserId = userId, CategoryName = categoryName, Description = description });
+            return await _db.QuerySingleAsync<Category>(
+                "create_category",
+                new { UserId = userId, CategoryName = categoryName, Description = description },
+                commandType: CommandType.StoredProcedure
+            );
         }
 
         public async Task<Category> UpdateCategory(int categoryId, string categoryName, string description)
         {
-            var sql = "EXEC UpdateCategory @CategoryId, @CategoryName, @Description";
-            return await _db.QuerySingleAsync<Category>(sql, new { CategoryId = categoryId, CategoryName = categoryName, Description = description });
+            return await _db.QuerySingleAsync<Category>(
+                "update_category",
+                new { CategoryId = categoryId, CategoryName = categoryName, Description = description },
+                commandType: CommandType.StoredProcedure
+            );
         }
 
         public async Task<bool> DeleteCategory(int categoryId)
         {
-            var sql = "EXEC DeleteCategory @CategoryId";
-            await _db.ExecuteAsync(sql, new { CategoryId = categoryId });
+            await _db.ExecuteAsync(
+                "delete_category",
+                new { CategoryId = categoryId },
+                commandType: CommandType.StoredProcedure
+            );
             return true;
         }
 
@@ -103,64 +121,61 @@ namespace CashCompass.API.GraphQL
         // ==============================
         public async Task<Expense> CreateExpense(int userId, string expenseName, decimal amount, int categoryId, DateTime expenseDate, string notes)
         {
-            var sql = "EXEC CreateExpense @UserId, @ExpenseName, @Amount, @CategoryId, @ExpenseDate, @Notes";
-            return await _db.QuerySingleAsync<Expense>(sql, new { UserId = userId, ExpenseName = expenseName, Amount = amount, CategoryId = categoryId, ExpenseDate = expenseDate, Notes = notes });
+            return await _db.QuerySingleAsync<Expense>(
+                "create_expense",
+                new { UserId = userId, ExpenseName = expenseName, Amount = amount, CategoryId = categoryId, ExpenseDate = expenseDate, Notes = notes },
+                commandType: CommandType.StoredProcedure
+            );
         }
 
         public async Task<Expense> UpdateExpense(int expenseId, string expenseName, decimal amount, int categoryId, DateTime expenseDate, string notes)
         {
-            var sql = "EXEC UpdateExpense @ExpenseId, @ExpenseName, @Amount, @CategoryId, @ExpenseDate, @Notes";
-            return await _db.QuerySingleAsync<Expense>(sql, new { ExpenseId = expenseId, ExpenseName = expenseName, Amount = amount, CategoryId = categoryId, ExpenseDate = expenseDate, Notes = notes });
+            return await _db.QuerySingleAsync<Expense>(
+                "update_expense",
+                new { ExpenseId = expenseId, ExpenseName = expenseName, Amount = amount, CategoryId = categoryId, ExpenseDate = expenseDate, Notes = notes },
+                commandType: CommandType.StoredProcedure
+            );
         }
 
         public async Task<bool> DeleteExpense(int expenseId)
         {
-            var sql = "EXEC DeleteExpense @ExpenseId";
-            await _db.ExecuteAsync(sql, new { ExpenseId = expenseId });
+            await _db.ExecuteAsync(
+                "delete_expense",
+                new { ExpenseId = expenseId },
+                commandType: CommandType.StoredProcedure
+            );
             return true;
         }
 
         // ==============================
-        // Allocations
+        // Allocations (CRITICAL FIX: Added UserId)
         // ==============================
-        public async Task<Allocation> CreateAllocation(int incomeId, int categoryId, string allocationType, decimal allocationValue)
+        public async Task<Allocation> CreateAllocation(int userId, int incomeId, int categoryId, string allocationType, decimal allocationValue)
         {
-            var sql = "EXEC CreateAllocation @IncomeId, @CategoryId, @AllocationType, @AllocationValue";
-            return await _db.QuerySingleAsync<Allocation>(sql, new { IncomeId = incomeId, CategoryId = categoryId, AllocationType = allocationType, AllocationValue = allocationValue });
+            return await _db.QuerySingleAsync<Allocation>(
+                "create_allocation",
+                new { UserId = userId, IncomeId = incomeId, CategoryId = categoryId, AllocationType = allocationType, AllocationValue = allocationValue },
+                commandType: CommandType.StoredProcedure
+            );
         }
 
         public async Task<Allocation> UpdateAllocation(int allocationId, string allocationType, decimal allocationValue)
         {
-            var sql = "EXEC UpdateAllocation @AllocationId, @AllocationType, @AllocationValue";
-            return await _db.QuerySingleAsync<Allocation>(sql, new { AllocationId = allocationId, AllocationType = allocationType, AllocationValue = allocationValue });
+            // Note: UserId and IncomeId are typically not updated in this mutation.
+            return await _db.QuerySingleAsync<Allocation>(
+                "update_allocation",
+                new { AllocationId = allocationId, AllocationType = allocationType, AllocationValue = allocationValue },
+                commandType: CommandType.StoredProcedure
+            );
         }
 
         public async Task<bool> DeleteAllocation(int allocationId)
         {
-            var sql = "EXEC DeleteAllocation @AllocationId";
-            await _db.ExecuteAsync(sql, new { AllocationId = allocationId });
-            return true;
-        }
-
-        // ==============================
-        // Transactions
-        // ==============================
-        public async Task<Transaction> CreateTransaction(int userId, decimal amount, string transactionType, DateTime transactionDate, string notes)
-        {
-            var sql = "EXEC CreateTransaction @UserId, @Amount, @TransactionType, @TransactionDate, @Notes";
-            return await _db.QuerySingleAsync<Transaction>(sql, new { UserId = userId, Amount = amount, TransactionType = transactionType, TransactionDate = transactionDate, Notes = notes });
-        }
-
-        public async Task<Transaction> UpdateTransaction(int transactionId, decimal amount, string transactionType, DateTime transactionDate, string notes)
-        {
-            var sql = "EXEC UpdateTransaction @TransactionId, @Amount, @TransactionType, @TransactionDate, @Notes";
-            return await _db.QuerySingleAsync<Transaction>(sql, new { TransactionId = transactionId, Amount = amount, TransactionType = transactionType, TransactionDate = transactionDate, Notes = notes });
-        }
-
-        public async Task<bool> DeleteTransaction(int transactionId)
-        {
-            var sql = "EXEC DeleteTransaction @TransactionId";
-            await _db.ExecuteAsync(sql, new { TransactionId = transactionId });
+            await _db.ExecuteAsync(
+                "delete_allocation",
+                new { AllocationId = allocationId },
+                commandType: CommandType.StoredProcedure
+            );
             return true;
         }
     }

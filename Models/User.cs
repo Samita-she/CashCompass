@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 namespace CashCompass.API.Models
 {
     public class User
@@ -7,7 +8,13 @@ namespace CashCompass.API.Models
         public required string Email { get; set; }
         public required string PasswordHash { get; set; }
         
-        // ADDED: This fixes the CS1061 errors in UsersController.cs
+        
         public DateTime CreatedAt { get; set; } 
+
+        public ICollection<Category> Categories { get; set; } = new List<Category>();
+        public ICollection<Expense> Expenses { get; set; } = new List<Expense>();
+        public ICollection<IncomeSource> IncomeSources { get; set; } = new List<IncomeSource>(); 
+        public ICollection<Allocation> Allocations { get; set; } = new List<Allocation>(); 
+        
     }
 }

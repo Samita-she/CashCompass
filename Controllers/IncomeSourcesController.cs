@@ -68,7 +68,9 @@ namespace CashCompass.API.Controllers
                 SourceName = dto.SourceName,
                 Amount = dto.Amount,
                 UserId = dto.UserId,
-                CreatedAt = DateTime.UtcNow
+                
+                PayFrequency = dto.PayFrequency,
+                NextPayDate = dto.NextPayDate,
             };
 
             _context.IncomeSources.Add(newSource);

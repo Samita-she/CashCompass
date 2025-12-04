@@ -1,10 +1,9 @@
-using System.ComponentModel.DataAnnotations; // 👈 ADD THIS USING DIRECTIVE
-
+using System.ComponentModel.DataAnnotations; 
 namespace CashCompass.API.Models
 {
     public class Expense
     {
-        [Key] // 👈 FIX: Explicitly marks this as the Primary Key
+        [Key]
         public int ExpenseId { get; set; }   // PK
         
         public int CategoryId { get; set; }  // FK → Category
@@ -17,9 +16,10 @@ namespace CashCompass.API.Models
         public string? Notes { get; set; }
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+        public  User? User { get; set; }
+        public  Category? Category { get; set; }
+    
         
-        // You should also define the navigation properties later, e.g.:
-        // public User User { get; set; } = null!;
-        // public Category Category { get; set; } = null!;
+        
     }
 }

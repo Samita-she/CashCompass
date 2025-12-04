@@ -84,6 +84,7 @@ namespace CashCompass.API.Controllers
             {
                 IncomeId = dto.IncomeId,
                 CategoryId = dto.CategoryId,
+                UserId = dto.UserId,
                 AllocationType = dto.AllocationType,
                 AllocationValue = dto.AllocationValue,
                 CreatedAt = DateTime.UtcNow
@@ -95,6 +96,7 @@ namespace CashCompass.API.Controllers
             var result = new AllocationDto
             {
                 AllocationId = allocation.AllocationId,
+                UserId = allocation.UserId,
                 IncomeId = allocation.IncomeId,
                 CategoryId = allocation.CategoryId,
                 AllocationType = allocation.AllocationType,

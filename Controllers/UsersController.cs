@@ -25,7 +25,7 @@ namespace CashCompass.API.Controllers
             _passwordHasher = passwordHasher; 
         }
 
-        // 📌 GET ALL USERS
+        //  GET ALL USERS
         [HttpGet]
         public async Task<IActionResult> GetUsers()
         {
@@ -43,7 +43,7 @@ namespace CashCompass.API.Controllers
             return Ok(users);
         }
 
-        // 📌 GET USER BY ID
+        // GET USER BY ID
         [HttpGet("{id}")]
         public async Task<IActionResult> GetUser(int id)
         {
@@ -62,7 +62,7 @@ namespace CashCompass.API.Controllers
             return Ok(user);
         }
 
-        // 📌 CREATE USER
+        //  CREATE USER
         [HttpPost]
         public async Task<IActionResult> CreateUser(UserCreateDto dto)
         {
@@ -90,7 +90,7 @@ namespace CashCompass.API.Controllers
             return CreatedAtAction(nameof(GetUser), new { id = newUser.UserId }, result);
         }
 
-        // 📌 UPDATE USER
+        //  UPDATE USER
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdateUser(int id, UserUpdateDto dto)
         {
@@ -113,7 +113,7 @@ namespace CashCompass.API.Controllers
             return Ok(result);
         }
 
-        // 📌 DELETE USER
+        // DELETE USER
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteUser(int id)
         {
