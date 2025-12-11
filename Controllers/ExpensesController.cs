@@ -17,21 +17,42 @@ namespace CashCompass.API.Controllers
             _context = context;
         }
 
+        // ⭐ NEW HELPER: Converts any incoming DateTime to UTC kind,
+        // which is required by PostgreSQL for 'timestamp with time zone' fields.
+        private DateTime ConvertToUtc(DateTime date)
+        {
+            // If the Kind is Unspecified (common for JSON from Flutter), 
+            // treat it as UTC. Otherwise, convert it.
+            if (date.Kind == DateTimeKind.Unspecified || date.Kind == DateTimeKind.Local)
+            {
+                return DateTime.SpecifyKind(date, DateTimeKind.Utc);
+            }
+            return date.ToUniversalTime();
+        }
+
+        // Helper method to create a clean ExpenseDto projection
+        private static ExpenseDto ToDto(Expense e)
+        {
+            return new ExpenseDto
+            {
+                ExpenseId = e.ExpenseId,
+                ExpenseName = e.ExpenseName,
+                Amount = e.Amount,
+                CategoryId = e.CategoryId,
+                // ⭐ FIX: Include UserId in the DTO projection
+                UserId = e.UserId, 
+                ExpenseDate = e.ExpenseDate,
+                CreatedAt = e.CreatedAt, // Database should store this in UTC
+                Notes = e.Notes
+            };
+        }
+
         // GET ALL EXPENSES
         [HttpGet]
         public async Task<IActionResult> GetExpenses()
         {
             var expenses = await _context.Expenses
-                .Select(e => new ExpenseDto
-                {
-                    ExpenseId = e.ExpenseId,
-                    ExpenseName = e.ExpenseName,
-                    Amount = e.Amount,
-                    CategoryId = e.CategoryId,
-                    ExpenseDate = e.ExpenseDate,
-                    Notes = e.Notes,
-                    CreatedAt = e.CreatedAt
-                })
+                .Select(e => ToDto(e)) // Using the helper DTO projection
                 .ToListAsync();
 
             return Ok(expenses);
@@ -43,16 +64,7 @@ namespace CashCompass.API.Controllers
         {
             var expenses = await _context.Expenses
                 .Where(e => e.CategoryId == categoryId)
-                .Select(e => new ExpenseDto
-                {
-                    ExpenseId = e.ExpenseId,
-                    ExpenseName = e.ExpenseName,
-                    Amount = e.Amount,
-                    CategoryId = e.CategoryId,
-                    ExpenseDate = e.ExpenseDate,
-                    Notes = e.Notes,
-                    CreatedAt = e.CreatedAt
-                })
+                .Select(e => ToDto(e)) // Using the helper DTO projection
                 .ToListAsync();
 
             return Ok(expenses);
@@ -65,16 +77,7 @@ namespace CashCompass.API.Controllers
             var e = await _context.Expenses.FindAsync(id);
             if (e == null) return NotFound();
 
-            var dto = new ExpenseDto
-            {
-                ExpenseId = e.ExpenseId,
-                ExpenseName = e.ExpenseName,
-                Amount = e.Amount,
-                CategoryId = e.CategoryId,
-                ExpenseDate = e.ExpenseDate,
-                Notes = e.Notes,
-                CreatedAt = e.CreatedAt
-            };
+            var dto = ToDto(e); // Using the helper DTO projection
 
             return Ok(dto);
         }
@@ -89,24 +92,17 @@ namespace CashCompass.API.Controllers
                 Amount = dto.Amount,
                 CategoryId = dto.CategoryId,
                 UserId = dto.UserId,
-                ExpenseDate = dto.ExpenseDate,
+                // ⭐ FIX APPLIED: Ensure date is stored as UTC
+                ExpenseDate = ConvertToUtc(dto.ExpenseDate), 
                 Notes = dto.Notes,
-               
+                // CreatedAt will be set automatically, but if model uses it, 
+                // it should also be UTC (DateTime.UtcNow handles this implicitly).
             };
 
             _context.Expenses.Add(expense);
             await _context.SaveChangesAsync();
 
-            var result = new ExpenseDto
-            {
-                ExpenseId = expense.ExpenseId,
-                ExpenseName = expense.ExpenseName,
-                Amount = expense.Amount,
-                CategoryId = expense.CategoryId,
-                ExpenseDate = expense.ExpenseDate,
-                Notes = expense.Notes,
-                CreatedAt = expense.CreatedAt
-            };
+            var result = ToDto(expense); // Using the helper DTO projection
 
             return CreatedAtAction(nameof(GetExpense), new { id = expense.ExpenseId }, result);
         }
@@ -118,24 +114,35 @@ namespace CashCompass.API.Controllers
             var expense = await _context.Expenses.FindAsync(id);
             if (expense == null) return NotFound();
 
+            // ⭐ CRITICAL FIX: Ensure all fields are mapped
             expense.ExpenseName = dto.ExpenseName;
             expense.Amount = dto.Amount;
             expense.CategoryId = dto.CategoryId;
-            expense.ExpenseDate = dto.ExpenseDate;
+            
+            // ⭐ CRITICAL FIX: Add mapping for the UserId field
+            expense.UserId = dto.UserId;
+            
+            // ⭐ FIX APPLIED: Ensure date is stored as UTC
+            expense.ExpenseDate = ConvertToUtc(dto.ExpenseDate); 
             expense.Notes = dto.Notes;
 
-            await _context.SaveChangesAsync();
-
-            var result = new ExpenseDto
+            try
             {
-                ExpenseId = expense.ExpenseId,
-                ExpenseName = expense.ExpenseName,
-                Amount = expense.Amount,
-                CategoryId = expense.CategoryId,
-                ExpenseDate = expense.ExpenseDate,
-                Notes = expense.Notes,
-                CreatedAt = expense.CreatedAt
-            };
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                if (!_context.Expenses.Any(e => e.ExpenseId == id))
+                {
+                    return NotFound();
+                }
+                else
+                {
+                    throw;
+                }
+            }
+
+            var result = ToDto(expense); // Using the helper DTO projection
 
             return Ok(result);
         }

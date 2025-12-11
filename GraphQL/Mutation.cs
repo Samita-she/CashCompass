@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 using CashCompass.API.DTOs;
 using CashCompass.API.Models;
 using HotChocolate;
-using Npgsql; // Needed for PostgreSQL specific handling
+using Npgsql; 
 
 namespace CashCompass.API.GraphQL
 {
@@ -21,16 +21,28 @@ namespace CashCompass.API.GraphQL
         // ==============================
         // Users
         // ==============================
-        public async Task<UserDto> CreateUser(string fullName, string email, string password)
-        {
-            // PostgreSQL often returns the created object directly from a function/procedure
-            // We use CommandType.StoredProcedure here, assuming the procedure/function exists
-            return await _db.QuerySingleAsync<UserDto>(
-                "create_user", // Name of the PostgreSQL stored function/procedure
-                new { FullName = fullName, Email = email, Password = password },
-                commandType: CommandType.StoredProcedure
-            );
-        }
+        public async Task<UserDto?> CreateUser(string fullName, string email, string password)
+{
+    try
+    {
+        var result = await _db.QuerySingleAsync<UserDto>(
+            "create_user", 
+            new { FullName = fullName, Email = email, Password = password },
+            commandType: CommandType.StoredProcedure
+        );
+
+        return result;
+    }
+    catch (Exception ex)
+    {
+        // TODO: Replace with your logging framework
+        Console.WriteLine($"[ERROR] Failed to create user: {ex.Message}");
+
+        // You can rethrow, wrap, or return null based on your design
+        return null;
+    }
+}
+
 
         public async Task<UserDto> UpdateUser(int userId, string fullName, string email)
         {
@@ -43,7 +55,7 @@ namespace CashCompass.API.GraphQL
 
         public async Task<bool> DeleteUser(int userId)
         {
-            // Use ExecuteAsync for operations that don't return an object
+           
             await _db.ExecuteAsync(
                 "delete_user",
                 new { UserId = userId },
@@ -52,7 +64,7 @@ namespace CashCompass.API.GraphQL
             return true;
         }
 
-        // ❌ BulkUpdateUsers REMOVED: Feature relies on SQL Server Table-Valued Parameters.
+      
         
         // ==============================
         // IncomeSources

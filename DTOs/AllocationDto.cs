@@ -25,6 +25,9 @@ public class AllocationCreateDto
 public class AllocationUpdateDto
 {
    // public string AllocationName { get; set; } = string.Empty;
+
+    public int IncomeId { get; set; }
+    public int UserId { get; set; }
     public decimal AllocationValue { get; set; }
     public int CategoryId { get; set; }       
     public string AllocationType { get; set; } = string.Empty;

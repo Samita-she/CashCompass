@@ -1,8 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using CashCompass.API.Data;
-using CashCompass.API.Models; // for IncomeSource
-using CashCompass.API.DTOs;   // for IncomeSourceDto
+using CashCompass.API.Models;
+using CashCompass.API.DTOs;
+using System; 
 
 namespace CashCompass.API.Controllers
 {
@@ -26,7 +27,9 @@ namespace CashCompass.API.Controllers
                 SourceName = src.SourceName,
                 Amount = src.Amount,
                 UserId = src.UserId,
-                CreatedAt = src.CreatedAt
+                CreatedAt = src.CreatedAt,
+                PayFrequency = src.PayFrequency,
+                NextPayDate = src.NextPayDate
             };
         }
 
@@ -59,29 +62,40 @@ namespace CashCompass.API.Controllers
             return Ok(ToDto(source));
         }
 
-        // 📌 CREATE
-        [HttpPost]
-        public async Task<IActionResult> CreateIncomeSource(IncomeSourceCreateDto dto)
-        {
-            var newSource = new IncomeSource
-            {
-                SourceName = dto.SourceName,
-                Amount = dto.Amount,
-                UserId = dto.UserId,
-                
-                PayFrequency = dto.PayFrequency,
-                NextPayDate = dto.NextPayDate,
-            };
+       // 📌 CREATE 
+[HttpPost]
+public async Task<IActionResult> CreateIncomeSource(IncomeSourceCreateDto dto)
+{
+    // --- CRITICAL FIX: Handle DateTimeKind for PostgreSQL ---
+    
+   
+    DateTime nextPayDateFromDto = dto.NextPayDate;
+    
+    
+    DateTime nextPayDateUtc = DateTime.SpecifyKind(nextPayDateFromDto, DateTimeKind.Utc);
 
-            _context.IncomeSources.Add(newSource);
-            await _context.SaveChangesAsync();
+    var newSource = new IncomeSource
+    {
+        SourceName = dto.SourceName,
+        Amount = dto.Amount,
+        UserId = dto.UserId,
+        
+        PayFrequency = dto.PayFrequency,
+        NextPayDate = nextPayDateUtc, 
+        
+        
+        CreatedAt = DateTime.UtcNow 
+    };
 
-            return CreatedAtAction(
-                nameof(GetIncomeSource),
-                new { id = newSource.IncomeId },
-                ToDto(newSource)
-            );
-        }
+    _context.IncomeSources.Add(newSource);
+    await _context.SaveChangesAsync();
+
+    return CreatedAtAction(
+        nameof(GetIncomeSource),
+        new { id = newSource.IncomeId },
+        ToDto(newSource)
+    );
+}
 
         // 📌 UPDATE
         [HttpPut("{id}")]
@@ -92,7 +106,9 @@ namespace CashCompass.API.Controllers
 
             source.SourceName = dto.SourceName;
             source.Amount = dto.Amount;
-
+            
+            
+            
             await _context.SaveChangesAsync();
             return Ok(ToDto(source));
         }

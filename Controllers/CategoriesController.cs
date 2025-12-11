@@ -1,8 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using CashCompass.API.Data;
-using CashCompass.API.Models;   // ⚡ Models for database
-using CashCompass.API.DTOs;     // ⚡ DTOs for API communication
+using CashCompass.API.Models;
+using CashCompass.API.DTOs;
+using System.Linq; // Added for convenience/standard practice
 
 namespace CashCompass.API.Controllers
 {
@@ -96,18 +97,38 @@ namespace CashCompass.API.Controllers
             return CreatedAtAction(nameof(GetCategory), new { id = category.CategoryId }, result);
         }
 
-        // UPDATE CATEGORY
+        // UPDATE CATEGORY - FIX APPLIED HERE
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdateCategory(int id, CategoryUpdateDto dto)
         {
             var category = await _context.Categories.FindAsync(id);
             if (category == null) return NotFound();
 
+            // CRITICAL FIX: Ensure all fields sent from the Flutter DTO are mapped
             category.CategoryName = dto.CategoryName;
+            
+            // ⭐ FIX: Add mapping for the UserId field
+            category.UserId = dto.UserId;
+            
             category.Description = dto.Description ?? category.Description;
 
-            await _context.SaveChangesAsync();
-
+            try
+            {
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                if (!_context.Categories.Any(e => e.CategoryId == id))
+                {
+                    return NotFound();
+                }
+                else
+                {
+                    throw;
+                }
+            }
+            
+            // Return the updated DTO
             var result = new CategoryDto
             {
                 CategoryId = category.CategoryId,
