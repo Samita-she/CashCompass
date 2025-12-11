@@ -19,6 +19,7 @@ class _CategoriesPageState extends State<CategoriesPage> {
   }
 
   void _loadCategories() {
+    // This function reloads data from the API
     _categories = ApiService.fetchCategories();
   }
 
@@ -35,7 +36,11 @@ class _CategoriesPageState extends State<CategoriesPage> {
   }
 
   void _showCategoryDialog({Map<String, dynamic>? category}) {
-    // Controllers initialized with existing data (PascalCase/camelCase safe)
+    // Controllers initialized with existing data
+    final TextEditingController userIdController = TextEditingController(
+      // Ensure UserId is correctly displayed for editing
+      text: (category?['UserId'] ?? category?['userId'])?.toString() ?? '',
+    );
     final TextEditingController nameController = TextEditingController(
       text: category?['CategoryName'] ?? category?['categoryName'] ?? '',
     );
@@ -43,7 +48,6 @@ class _CategoriesPageState extends State<CategoriesPage> {
       text: category?['Description'] ?? category?['description'] ?? '',
     );
 
-    // Ensure ID is read safely for updates
     final int? categoryId = category?['CategoryId'] ?? category?['categoryId'];
 
     showDialog(
@@ -53,10 +57,18 @@ class _CategoriesPageState extends State<CategoriesPage> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            // User ID Field
+            TextField(
+              controller: userIdController,
+              decoration: const InputDecoration(labelText: 'User ID *'),
+              keyboardType: TextInputType.number,
+            ),
+            // Name Field
             TextField(
               controller: nameController,
               decoration: const InputDecoration(labelText: 'Name *'),
             ),
+            // Description Field
             TextField(
               controller: descriptionController,
               decoration: const InputDecoration(labelText: 'Description'),
@@ -70,37 +82,50 @@ class _CategoriesPageState extends State<CategoriesPage> {
           ),
           ElevatedButton(
             onPressed: () async {
-              // Validation Fix: Check required fields
-              if (nameController.text.isEmpty) {
-                _showSnackBar('Category Name is required.', isError: true);
+              final parsedUserId = int.tryParse(userIdController.text);
+
+              // Input Validation
+              if (nameController.text.isEmpty || parsedUserId == null) {
+                _showSnackBar(
+                  'Category Name and a valid User ID are required.',
+                  isError: true,
+                );
                 return;
               }
 
               final data = {
+                'UserId': parsedUserId, // Included for API request
                 'CategoryName': nameController.text,
                 'Description': descriptionController.text,
               };
+
+              bool success = false;
 
               try {
                 if (category == null) {
                   await ApiService.addCategory(data);
                   _showSnackBar('Category added successfully!');
+                  success = true;
                 } else {
                   if (categoryId != null) {
                     await ApiService.updateCategory(categoryId, data);
                     _showSnackBar('Category updated successfully!');
+                    success = true;
                   }
                 }
               } catch (e) {
-                // Error Handling Fix: Show SnackBar on failure
                 _showSnackBar(
                   'Failed to save category: ${e.toString()}',
                   isError: true,
                 );
               }
 
-              if (mounted) Navigator.pop(context);
-              setState(() => _loadCategories());
+              // ⭐ CRITICAL FIX: Only pop the dialog AND reload state IF successful.
+              if (success) {
+                if (mounted) Navigator.pop(context);
+                setState(() => _loadCategories());
+              }
+              // If failed, the dialog remains open showing the error message.
             },
             child: const Text('Save'),
           ),
@@ -110,30 +135,33 @@ class _CategoriesPageState extends State<CategoriesPage> {
   }
 
   void _deleteCategory(int id) async {
+    bool success = false;
     try {
       await ApiService.deleteCategory(id);
       _showSnackBar('Category deleted successfully!');
+      success = true;
     } catch (e) {
-      // Error Handling Fix: Show SnackBar on failure
       _showSnackBar(
         'Failed to delete category: ${e.toString()}',
         isError: true,
       );
     }
-    setState(() => _loadCategories());
+
+    if (success) {
+      setState(() => _loadCategories());
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Categories (REST API)')),
+      appBar: AppBar(title: const Text('Categories')),
       body: FutureBuilder<List<dynamic>>(
         future: _categories,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           } else if (snapshot.hasError) {
-            // Display friendly error message
             return Center(
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
@@ -154,7 +182,6 @@ class _CategoriesPageState extends State<CategoriesPage> {
               itemBuilder: (context, index) {
                 final cat = categories[index];
 
-                // Safely extract and display data
                 final name =
                     cat['CategoryName'] ??
                     cat['categoryName'] ??
@@ -165,9 +192,11 @@ class _CategoriesPageState extends State<CategoriesPage> {
                     'No description provided';
                 final id = cat['CategoryId'] ?? cat['categoryId'];
 
+                final userId = cat['UserId'] ?? cat['userId'] ?? 'N/A';
+
                 return ListTile(
                   title: Text(name),
-                  subtitle: Text(description),
+                  subtitle: Text('User ID: ${userId} | ${description}'),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [

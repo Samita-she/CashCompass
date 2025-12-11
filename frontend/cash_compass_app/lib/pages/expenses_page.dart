@@ -2,6 +2,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../api_service.dart';
 
+// Define a simple structure for Category data used in the Dropdown
+class CategoryItem {
+  final int id;
+  final String name;
+
+  CategoryItem(this.id, this.name);
+}
+
 class ExpensesPage extends StatefulWidget {
   const ExpensesPage({super.key});
 
@@ -10,16 +18,38 @@ class ExpensesPage extends StatefulWidget {
 }
 
 class _ExpensesPageState extends State<ExpensesPage> {
-  Future<List<dynamic>>? _expenses;
+  Future<Map<String, dynamic>>? _pageData;
+  List<CategoryItem> _categories = [];
+
+  // State variable to hold the currently selected Category ID
+  int? _selectedCategoryId;
 
   @override
   void initState() {
     super.initState();
-    _loadExpenses();
+    _loadPageData();
   }
 
-  void _loadExpenses() {
-    _expenses = ApiService.fetchExpenses();
+  // Combine fetching both Expenses and Categories
+  void _loadPageData() {
+    _pageData =
+        Future.wait([
+          ApiService.fetchExpenses(),
+          ApiService.fetchCategories(),
+        ]).then((results) {
+          final expenses = results[0] as List<dynamic>;
+          final categoryList = results[1] as List<dynamic>;
+
+          // Map API data to CategoryItem list
+          _categories = categoryList.map((c) {
+            return CategoryItem(
+              c['categoryId'] ?? c['CategoryId'],
+              c['categoryName'] ?? c['CategoryName'],
+            );
+          }).toList();
+
+          return {'expenses': expenses};
+        });
   }
 
   // Helper to show SnackBar feedback
@@ -49,11 +79,7 @@ class _ExpensesPageState extends State<ExpensesPage> {
   }
 
   void _showExpenseDialog({Map<String, dynamic>? expense}) {
-    // Controllers initialized with existing data (PascalCase/camelCase safe)
-    final TextEditingController categoryIdController = TextEditingController(
-      text:
-          (expense?['CategoryId'] ?? expense?['categoryId'])?.toString() ?? '',
-    );
+    // Initialize controllers
     final TextEditingController userIdController = TextEditingController(
       text: (expense?['UserId'] ?? expense?['userId'])?.toString() ?? '',
     );
@@ -63,7 +89,6 @@ class _ExpensesPageState extends State<ExpensesPage> {
     final TextEditingController amountController = TextEditingController(
       text: (expense?['Amount'] ?? expense?['amount'])?.toString() ?? '',
     );
-    // Date Picker UX Fix: Controller for the date
     final TextEditingController dateController = TextEditingController(
       text: expense?['ExpenseDate'] ?? expense?['expenseDate'] ?? '',
     );
@@ -71,8 +96,20 @@ class _ExpensesPageState extends State<ExpensesPage> {
       text: expense?['Notes'] ?? expense?['notes'] ?? '',
     );
 
+    // Set initial selected category for editing
+    _selectedCategoryId = expense?['CategoryId'] ?? expense?['categoryId'];
+
     // Get ID safely for update
     final int? expenseId = expense?['ExpenseId'] ?? expense?['expenseId'];
+
+    // If categories are empty, show an error and return
+    if (_categories.isEmpty) {
+      _showSnackBar(
+        'No categories available. Please add categories first.',
+        isError: true,
+      );
+      return;
+    }
 
     showDialog(
       context: context,
@@ -82,16 +119,33 @@ class _ExpensesPageState extends State<ExpensesPage> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // User ID (Required Field)
               TextField(
                 controller: userIdController,
                 decoration: const InputDecoration(labelText: 'User ID *'),
                 keyboardType: TextInputType.number,
               ),
-              TextField(
-                controller: categoryIdController,
-                decoration: const InputDecoration(labelText: 'Category ID *'),
-                keyboardType: TextInputType.number,
+
+              // ⭐ CATEGORY DROPDOWN FIELD
+              DropdownButtonFormField<int>(
+                value: _selectedCategoryId,
+                decoration: const InputDecoration(labelText: 'Category Name *'),
+                items: _categories.map((CategoryItem cat) {
+                  return DropdownMenuItem<int>(
+                    value: cat.id,
+                    child: Text(cat.name),
+                  );
+                }).toList(),
+                onChanged: (int? newValue) {
+                  setState(() {
+                    _selectedCategoryId = newValue;
+                  });
+                },
+                validator: (value) =>
+                    value == null ? 'Category is required' : null,
               ),
+              const SizedBox(height: 12), // Spacing after dropdown
+              // Remaining Fields
               TextField(
                 controller: nameController,
                 decoration: const InputDecoration(labelText: 'Expense Name *'),
@@ -101,7 +155,6 @@ class _ExpensesPageState extends State<ExpensesPage> {
                 decoration: const InputDecoration(labelText: 'Amount *'),
                 keyboardType: TextInputType.number,
               ),
-              // Use a suffix icon to trigger the picker
               TextField(
                 controller: dateController,
                 decoration: InputDecoration(
@@ -128,12 +181,10 @@ class _ExpensesPageState extends State<ExpensesPage> {
           ElevatedButton(
             onPressed: () async {
               final parsedUserId = int.tryParse(userIdController.text);
-              final parsedCategoryId = int.tryParse(categoryIdController.text);
               final parsedAmount = double.tryParse(amountController.text);
 
-              // Validation Fix: Check required fields
               if (parsedUserId == null ||
-                  parsedCategoryId == null ||
+                  _selectedCategoryId == null || // Check selected Category ID
                   nameController.text.isEmpty ||
                   parsedAmount == null ||
                   parsedAmount <= 0 ||
@@ -145,9 +196,8 @@ class _ExpensesPageState extends State<ExpensesPage> {
                 return;
               }
 
-              // Ensure keys sent to the C# API are PascalCase
               final data = {
-                'CategoryId': parsedCategoryId,
+                'CategoryId': _selectedCategoryId, // Use the selected ID
                 'UserId': parsedUserId,
                 'ExpenseName': nameController.text,
                 'Amount': parsedAmount,
@@ -155,26 +205,34 @@ class _ExpensesPageState extends State<ExpensesPage> {
                 'Notes': notesController.text,
               };
 
+              bool success = false;
+
               try {
                 if (expense == null) {
                   await ApiService.addExpense(data);
                   _showSnackBar('Expense added successfully!');
+                  success = true;
                 } else {
                   if (expenseId != null) {
                     await ApiService.updateExpense(expenseId, data);
                     _showSnackBar('Expense updated successfully!');
+                    success = true;
                   }
                 }
               } catch (e) {
-                // Error Handling Fix: Show SnackBar on failure
                 _showSnackBar(
                   'Failed to save expense: ${e.toString()}',
                   isError: true,
                 );
               }
 
-              if (mounted) Navigator.pop(context);
-              setState(() => _loadExpenses());
+              // ⭐ Stability Fix: Only pop and reload IF successful
+              if (success) {
+                if (mounted) Navigator.pop(context);
+                setState(() => _loadPageData());
+              }
+              // Reset selection variable after potential state update
+              _selectedCategoryId = null;
             },
             child: const Text('Save'),
           ),
@@ -184,27 +242,32 @@ class _ExpensesPageState extends State<ExpensesPage> {
   }
 
   void _deleteExpense(int id) async {
+    bool success = false;
     try {
       await ApiService.deleteExpense(id);
       _showSnackBar('Expense deleted successfully!');
+      success = true;
     } catch (e) {
-      //Show SnackBar on failure
+      // ⭐ Stability Fix: Show SnackBar on failure
       _showSnackBar('Failed to delete expense: ${e.toString()}', isError: true);
     }
-    setState(() => _loadExpenses());
+
+    // ⭐ Stability Fix: Only reload the state if the deletion was successful
+    if (success) {
+      setState(() => _loadPageData());
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Expenses (REST API)')),
-      body: FutureBuilder<List<dynamic>>(
-        future: _expenses,
+      appBar: AppBar(title: const Text('Expenses')),
+      body: FutureBuilder<Map<String, dynamic>>(
+        future: _pageData,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           } else if (snapshot.hasError) {
-            // Display friendly error message
             return Center(
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
@@ -214,18 +277,19 @@ class _ExpensesPageState extends State<ExpensesPage> {
                 ),
               ),
             );
-          } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          } else if (!snapshot.hasData ||
+              (snapshot.data!['expenses'] as List).isEmpty) {
             return const Center(
               child: Text('No expenses found. Tap + to add one.'),
             );
           } else {
-            final expenses = snapshot.data!;
+            final expenses = snapshot.data!['expenses'] as List<dynamic>;
             return ListView.builder(
               itemCount: expenses.length,
               itemBuilder: (context, index) {
                 final exp = expenses[index];
 
-                // Safely extract and display data
+                // Safely extract data
                 final name =
                     exp['ExpenseName'] ??
                     exp['expenseName'] ??
@@ -234,12 +298,21 @@ class _ExpensesPageState extends State<ExpensesPage> {
                     .toString();
                 final date = exp['ExpenseDate'] ?? exp['expenseDate'] ?? 'N/A';
                 final id = exp['ExpenseId'] ?? exp['expenseId'];
+                final categoryId = exp['CategoryId'] ?? exp['categoryId'];
+
+                // Find Category Name for display
+                final categoryName = _categories
+                    .firstWhere(
+                      (cat) => cat.id == categoryId,
+                      orElse: () =>
+                          CategoryItem(categoryId, 'Unknown Category'),
+                    )
+                    .name;
 
                 return ListTile(
                   title: Text(name),
-
                   subtitle: Text(
-                    'Amount: \$${amount} | Date: ${date.substring(0, 10)} | Cat ID: ${exp['CategoryId'] ?? exp['categoryId']}',
+                    'Amount: \$${amount} | Date: ${date.substring(0, 10)} | Category: ${categoryName}',
                   ),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,

@@ -63,7 +63,7 @@ class _HomePageState extends State<HomePage> {
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: _onItemTapped,
-        // Set type fixed so all labels show up clearly in dark mode
+
         type: BottomNavigationBarType.fixed,
 
         items: const [

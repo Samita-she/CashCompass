@@ -10,7 +10,6 @@ class UsersPage extends StatefulWidget {
 }
 
 class _UsersPageState extends State<UsersPage> {
-  // Use a nullable Future to handle potential initial fetch errors more cleanly
   Future<List<dynamic>>? _users;
 
   @override
@@ -20,12 +19,12 @@ class _UsersPageState extends State<UsersPage> {
   }
 
   void _loadUsers() {
-    // Assigns the future to trigger the FutureBuilder
     _users = ApiService.fetchUsers();
   }
 
   // Helper to show SnackBar feedback
   void _showSnackBar(String message, {bool isError = false}) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
@@ -36,17 +35,14 @@ class _UsersPageState extends State<UsersPage> {
   }
 
   void _showUserDialog({Map<String, dynamic>? user}) {
-    // Controllers initialized with existing data (PascalCase/camelCase safe) or blank
     final TextEditingController fullNameController = TextEditingController(
       text: user?['FullName'] ?? user?['fullName'] ?? '',
     );
     final TextEditingController emailController = TextEditingController(
       text: user?['Email'] ?? user?['email'] ?? '',
     );
-    // Password controller is blank (NEVER read the hash back)
     final TextEditingController passwordController = TextEditingController();
 
-    // Get ID safely for update
     final int? userId = user?['UserId'] ?? user?['userId'];
 
     showDialog(
@@ -59,19 +55,18 @@ class _UsersPageState extends State<UsersPage> {
             children: [
               TextField(
                 controller: fullNameController,
-                decoration: const InputDecoration(labelText: 'Full Name'),
+                decoration: const InputDecoration(labelText: 'Full Name *'),
               ),
               TextField(
                 controller: emailController,
-                decoration: const InputDecoration(labelText: 'Email'),
+                decoration: const InputDecoration(labelText: 'Email *'),
                 keyboardType: TextInputType.emailAddress,
               ),
-              // Security Fix: Password field for NEW password only
               TextField(
                 controller: passwordController,
                 decoration: InputDecoration(
                   labelText: user == null
-                      ? 'Password (Required)'
+                      ? 'Password * (Required)'
                       : 'Password (Leave blank to keep existing)',
                 ),
                 obscureText: true,
@@ -86,7 +81,6 @@ class _UsersPageState extends State<UsersPage> {
           ),
           ElevatedButton(
             onPressed: () async {
-              // Ensure we have basic data before proceeding
               if (fullNameController.text.isEmpty ||
                   emailController.text.isEmpty) {
                 _showSnackBar(
@@ -104,37 +98,42 @@ class _UsersPageState extends State<UsersPage> {
                 return;
               }
 
-              // Ensure keys sent to the C# API are PascalCase
               final data = {
                 'FullName': fullNameController.text,
                 'Email': emailController.text,
               };
 
-              // Conditionally include PasswordHash ONLY if a value was entered
               if (passwordController.text.isNotEmpty) {
-                data['PasswordHash'] = passwordController.text;
+                data['Password'] = passwordController.text;
               }
+
+              bool success = false;
 
               try {
                 if (user == null) {
                   await ApiService.addUser(data);
                   _showSnackBar('User added successfully!');
+                  success = true;
                 } else {
                   if (userId != null) {
                     await ApiService.updateUser(userId, data);
                     _showSnackBar('User updated successfully!');
+                    success = true;
                   }
                 }
               } catch (e) {
-                // Error Handling Fix: Show SnackBar on failure
                 _showSnackBar(
                   'Failed to save user: ${e.toString()}',
                   isError: true,
                 );
               }
 
-              if (mounted) Navigator.pop(context);
-              setState(() => _loadUsers());
+              if (success) {
+                if (mounted) Navigator.pop(context);
+                setState(() => _loadUsers());
+              } else {
+                if (mounted) Navigator.pop(context);
+              }
             },
             child: const Text('Save'),
           ),
@@ -144,28 +143,30 @@ class _UsersPageState extends State<UsersPage> {
   }
 
   void _deleteUser(int id) async {
+    bool success = false;
     try {
       await ApiService.deleteUser(id);
       _showSnackBar('User deleted successfully!');
+      success = true;
     } catch (e) {
-      // Error Handling Fix: Show SnackBar on failure
       _showSnackBar('Failed to delete user: ${e.toString()}', isError: true);
     }
-    setState(() => _loadUsers());
+
+    if (success) {
+      setState(() => _loadUsers());
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Users (REST API)')),
+      appBar: AppBar(title: const Text('Users')),
       body: FutureBuilder<List<dynamic>>(
-        // _users can be null if initState failed, but we assume it's set
         future: _users,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           } else if (snapshot.hasError) {
-            // Display friendly error message
             return Center(
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
@@ -186,13 +187,11 @@ class _UsersPageState extends State<UsersPage> {
               itemBuilder: (context, index) {
                 final user = users[index];
 
-                // Safely extract and display data
                 final fullName =
                     user['FullName'] ?? user['fullName'] ?? 'Unnamed User';
                 final email =
                     user['Email'] ?? user['email'] ?? 'No email provided';
-                final id =
-                    user['UserId'] ?? user['userId']; // Use the ID for actions
+                final id = user['UserId'] ?? user['userId'];
 
                 return ListTile(
                   title: Text(fullName),

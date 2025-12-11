@@ -2,6 +2,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../api_service.dart';
 
+// Reusing CategoryItem structure
+class Item {
+  final int id;
+  final String name;
+
+  Item(this.id, this.name);
+}
+
 class AllocationsPage extends StatefulWidget {
   const AllocationsPage({super.key});
 
@@ -10,16 +18,56 @@ class AllocationsPage extends StatefulWidget {
 }
 
 class _AllocationsPageState extends State<AllocationsPage> {
-  Future<List<dynamic>>? _allocations;
+  // Future now holds all page data (allocations, categories, income sources)
+  Future<Map<String, dynamic>>? _pageData;
+
+  List<Item> _categories = [];
+  List<Item> _incomeSources = [];
+
+  // State variables to hold the currently selected IDs
+  int? _selectedCategoryId;
+  int? _selectedIncomeId;
+  String? _selectedAllocationType;
+
+  // List of valid Allocation Types for a dropdown if needed (for now, using text field)
+  final List<String> _allocationTypes = ['Fixed', 'Percent', 'Remaining'];
 
   @override
   void initState() {
     super.initState();
-    _loadAllocations();
+    _loadPageData();
   }
 
-  void _loadAllocations() {
-    _allocations = ApiService.fetchAllocations();
+  // Combine fetching all necessary data
+  void _loadPageData() {
+    _pageData =
+        Future.wait([
+          ApiService.fetchAllocations(),
+          ApiService.fetchCategories(),
+          ApiService.fetchIncomeSources(),
+        ]).then((results) {
+          final allocations = results[0] as List<dynamic>;
+          final categoryList = results[1] as List<dynamic>;
+          final incomeList = results[2] as List<dynamic>;
+
+          // Map API data to Item list for Categories
+          _categories = categoryList.map((c) {
+            return Item(
+              c['categoryId'] ?? c['CategoryId'],
+              c['categoryName'] ?? c['CategoryName'],
+            );
+          }).toList();
+
+          // Map API data to Item list for Income Sources
+          _incomeSources = incomeList.map((i) {
+            return Item(
+              i['incomeId'] ?? i['IncomeId'],
+              i['sourceName'] ?? i['SourceName'],
+            );
+          }).toList();
+
+          return {'allocations': allocations};
+        });
   }
 
   // Helper to show SnackBar feedback
@@ -35,21 +83,19 @@ class _AllocationsPageState extends State<AllocationsPage> {
   }
 
   void _showAllocationDialog({Map<String, dynamic>? allocation}) {
-    // Controllers initialized with existing data (PascalCase/camelCase safe)
-    final TextEditingController incomeIdController = TextEditingController(
-      text:
-          (allocation?['IncomeId'] ?? allocation?['incomeId'])?.toString() ??
-          '',
+    // Reset selections for new dialog, or set for edit
+    _selectedCategoryId =
+        allocation?['CategoryId'] ?? allocation?['categoryId'];
+    _selectedIncomeId = allocation?['IncomeId'] ?? allocation?['incomeId'];
+    _selectedAllocationType =
+        allocation?['AllocationType'] ?? allocation?['allocationType'];
+
+    final TextEditingController userIdController = TextEditingController(
+      text: (allocation?['UserId'] ?? allocation?['userId'])?.toString() ?? '',
     );
-    final TextEditingController categoryIdController = TextEditingController(
-      text:
-          (allocation?['CategoryId'] ?? allocation?['categoryId'])
-              ?.toString() ??
-          '',
-    );
+    // Removed incomeIdController and categoryIdController
     final TextEditingController typeController = TextEditingController(
-      text:
-          allocation?['AllocationType'] ?? allocation?['allocationType'] ?? '',
+      text: _selectedAllocationType ?? '', // Use the state variable
     );
     final TextEditingController valueController = TextEditingController(
       text:
@@ -57,6 +103,15 @@ class _AllocationsPageState extends State<AllocationsPage> {
               ?.toString() ??
           '',
     );
+
+    // Check if necessary lists are empty before showing dialog
+    if (_categories.isEmpty || _incomeSources.isEmpty) {
+      _showSnackBar(
+        'Cannot add/edit allocation. Please ensure categories and income sources exist.',
+        isError: true,
+      );
+      return;
+    }
 
     // Get ID safely for update
     final int? allocationId =
@@ -66,35 +121,81 @@ class _AllocationsPageState extends State<AllocationsPage> {
       context: context,
       builder: (_) => AlertDialog(
         title: Text(allocation == null ? 'Add Allocation' : 'Edit Allocation'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: incomeIdController,
-                decoration: const InputDecoration(labelText: 'Income ID *'),
-                keyboardType: TextInputType.number,
+        content: StatefulBuilder(
+          // Use StatefulBuilder to manage dialog state (dropdowns)
+          builder: (BuildContext context, StateSetter setState) {
+            return SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: userIdController,
+                    decoration: const InputDecoration(labelText: 'User ID *'),
+                    keyboardType: TextInputType.number,
+                  ),
+
+                  // ⭐ INCOME SOURCE DROPDOWN
+                  DropdownButtonFormField<int>(
+                    value: _selectedIncomeId,
+                    decoration: const InputDecoration(
+                      labelText: 'Income Source *',
+                    ),
+                    items: _incomeSources.map((Item item) {
+                      return DropdownMenuItem<int>(
+                        value: item.id,
+                        child: Text(item.name),
+                      );
+                    }).toList(),
+                    onChanged: (int? newValue) {
+                      setState(() {
+                        _selectedIncomeId = newValue;
+                      });
+                    },
+                    validator: (value) =>
+                        value == null ? 'Income Source is required' : null,
+                  ),
+                  const SizedBox(height: 12),
+
+                  // ⭐ CATEGORY DROPDOWN
+                  DropdownButtonFormField<int>(
+                    value: _selectedCategoryId,
+                    decoration: const InputDecoration(
+                      labelText: 'Category Name *',
+                    ),
+                    items: _categories.map((Item item) {
+                      return DropdownMenuItem<int>(
+                        value: item.id,
+                        child: Text(item.name),
+                      );
+                    }).toList(),
+                    onChanged: (int? newValue) {
+                      setState(() {
+                        _selectedCategoryId = newValue;
+                      });
+                    },
+                    validator: (value) =>
+                        value == null ? 'Category is required' : null,
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Allocation Type Field (could also be a dropdown using _allocationTypes)
+                  TextField(
+                    controller: typeController,
+                    decoration: const InputDecoration(
+                      labelText: 'Allocation Type * (e.g., Fixed, Percent)',
+                    ),
+                  ),
+                  TextField(
+                    controller: valueController,
+                    decoration: const InputDecoration(
+                      labelText: 'Allocation Value *',
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
+                ],
               ),
-              TextField(
-                controller: categoryIdController,
-                decoration: const InputDecoration(labelText: 'Category ID *'),
-                keyboardType: TextInputType.number,
-              ),
-              TextField(
-                controller: typeController,
-                decoration: const InputDecoration(
-                  labelText: 'Allocation Type * (e.g., Fixed, Percent)',
-                ),
-              ),
-              TextField(
-                controller: valueController,
-                decoration: const InputDecoration(
-                  labelText: 'Allocation Value *',
-                ),
-                keyboardType: TextInputType.number,
-              ),
-            ],
-          ),
+            );
+          },
         ),
         actions: [
           TextButton(
@@ -103,37 +204,44 @@ class _AllocationsPageState extends State<AllocationsPage> {
           ),
           ElevatedButton(
             onPressed: () async {
-              final parsedIncomeId = int.tryParse(incomeIdController.text);
-              final parsedCategoryId = int.tryParse(categoryIdController.text);
+              // Now use the state variables for IDs
+              final parsedUserId = int.tryParse(userIdController.text);
               final parsedValue = double.tryParse(valueController.text);
 
-              if (parsedIncomeId == null ||
-                  parsedCategoryId == null ||
+              // FIX 2: Consolidate and correct validation block
+              if (parsedUserId == null ||
+                  _selectedIncomeId == null ||
+                  _selectedCategoryId == null ||
                   typeController.text.isEmpty ||
                   parsedValue == null ||
                   parsedValue < 0) {
                 _showSnackBar(
-                  'Please fill in all required fields (*) with valid numbers/text.',
+                  'Please fill in all required fields (*) with valid data.',
                   isError: true,
                 );
                 return;
               }
 
+              // Data construction uses selected IDs
               final data = {
-                'IncomeId': parsedIncomeId,
-                'CategoryId': parsedCategoryId,
+                'UserId': parsedUserId,
+                'IncomeId': _selectedIncomeId, // Use selected ID
+                'CategoryId': _selectedCategoryId, // Use selected ID
                 'AllocationType': typeController.text,
                 'AllocationValue': parsedValue,
               };
 
+              bool success = false;
               try {
                 if (allocation == null) {
                   await ApiService.addAllocation(data);
                   _showSnackBar('Allocation added successfully!');
+                  success = true;
                 } else {
                   if (allocationId != null) {
                     await ApiService.updateAllocation(allocationId, data);
                     _showSnackBar('Allocation updated successfully!');
+                    success = true;
                   }
                 }
               } catch (e) {
@@ -144,8 +252,15 @@ class _AllocationsPageState extends State<AllocationsPage> {
                 );
               }
 
-              if (mounted) Navigator.pop(context);
-              setState(() => _loadAllocations());
+              // ⭐ Stability Fix: Only pop and reload IF successful
+              if (success) {
+                if (mounted) Navigator.pop(context);
+                setState(() => _loadPageData());
+              }
+              // Reset selection variables after save attempt
+              _selectedCategoryId = null;
+              _selectedIncomeId = null;
+              _selectedAllocationType = null;
             },
             child: const Text('Save'),
           ),
@@ -155,9 +270,11 @@ class _AllocationsPageState extends State<AllocationsPage> {
   }
 
   void _deleteAllocation(int id) async {
+    bool success = false;
     try {
       await ApiService.deleteAllocation(id);
       _showSnackBar('Allocation deleted successfully!');
+      success = true;
     } catch (e) {
       // Error Handling Fix: Show SnackBar on failure
       _showSnackBar(
@@ -165,15 +282,19 @@ class _AllocationsPageState extends State<AllocationsPage> {
         isError: true,
       );
     }
-    setState(() => _loadAllocations());
+
+    // ⭐ Stability Fix: Only reload the state if the deletion was successful
+    if (success) {
+      setState(() => _loadPageData());
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Allocations (REST API)')),
-      body: FutureBuilder<List<dynamic>>(
-        future: _allocations,
+      appBar: AppBar(title: const Text('Allocations')),
+      body: FutureBuilder<Map<String, dynamic>>(
+        future: _pageData,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -188,18 +309,19 @@ class _AllocationsPageState extends State<AllocationsPage> {
                 ),
               ),
             );
-          } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+          } else if (!snapshot.hasData ||
+              (snapshot.data!['allocations'] as List).isEmpty) {
             return const Center(
               child: Text('No allocations found. Tap + to add one.'),
             );
           } else {
-            final allocations = snapshot.data!;
+            final allocations = snapshot.data!['allocations'] as List<dynamic>;
             return ListView.builder(
               itemCount: allocations.length,
               itemBuilder: (context, index) {
                 final alloc = allocations[index];
 
-                // Safely extract and display data
+                // Safely extract data
                 final id = alloc['AllocationId'] ?? alloc['allocationId'];
                 final type =
                     alloc['AllocationType'] ?? alloc['allocationType'] ?? 'N/A';
@@ -208,15 +330,28 @@ class _AllocationsPageState extends State<AllocationsPage> {
                             alloc['allocationValue'] ??
                             0.0)
                         .toString();
-                final incomeId =
-                    alloc['IncomeId'] ?? alloc['incomeId'] ?? 'N/A';
-                final categoryId =
-                    alloc['CategoryId'] ?? alloc['categoryId'] ?? 'N/A';
+                final incomeId = alloc['IncomeId'] ?? alloc['incomeId'];
+                final categoryId = alloc['CategoryId'] ?? alloc['categoryId'];
+
+                // ⭐ Find Names for display
+                final incomeName = _incomeSources
+                    .firstWhere(
+                      (item) => item.id == incomeId,
+                      orElse: () => Item(incomeId, 'Unknown Income'),
+                    )
+                    .name;
+                final categoryName = _categories
+                    .firstWhere(
+                      (item) => item.id == categoryId,
+                      orElse: () => Item(categoryId, 'Unknown Category'),
+                    )
+                    .name;
 
                 return ListTile(
                   title: Text('ID: $id | Type: $type'),
+                  // ⭐ Display Names instead of IDs
                   subtitle: Text(
-                    'Value: \$${value} | Income ID: $incomeId | Category ID: $categoryId',
+                    'Value: \$${value} | Income: $incomeName | Category: $categoryName',
                   ),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,

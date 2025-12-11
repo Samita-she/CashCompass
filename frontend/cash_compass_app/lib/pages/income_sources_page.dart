@@ -49,7 +49,6 @@ class _IncomeSourcesPageState extends State<IncomeSourcesPage> {
   }
 
   void _showIncomeSourceDialog({Map<String, dynamic>? source}) {
-    // Controllers initialized with existing data (PascalCase/camelCase safe) or blank
     final TextEditingController userIdController = TextEditingController(
       text: (source?['UserId'] ?? source?['userId'])?.toString() ?? '',
     );
@@ -62,7 +61,7 @@ class _IncomeSourcesPageState extends State<IncomeSourcesPage> {
     final TextEditingController frequencyController = TextEditingController(
       text: source?['PayFrequency'] ?? source?['payFrequency'] ?? '',
     );
-    // Date Picker UX Fix: Controller for the date
+
     final TextEditingController nextPayDateController = TextEditingController(
       text: source?['NextPayDate'] ?? source?['nextPayDate'] ?? '',
     );
@@ -98,7 +97,6 @@ class _IncomeSourcesPageState extends State<IncomeSourcesPage> {
                 controller: frequencyController,
                 decoration: const InputDecoration(labelText: 'Pay Frequency'),
               ),
-              // Date Picker UX Fix: Use a suffix icon to trigger the picker
               TextField(
                 controller: nextPayDateController,
                 decoration: InputDecoration(
@@ -123,7 +121,6 @@ class _IncomeSourcesPageState extends State<IncomeSourcesPage> {
               final parsedUserId = int.tryParse(userIdController.text);
               final parsedAmount = double.tryParse(amountController.text);
 
-              // Validation Fix: Check required fields
               if (parsedUserId == null ||
                   nameController.text.isEmpty ||
                   parsedAmount == null ||
@@ -135,38 +132,47 @@ class _IncomeSourcesPageState extends State<IncomeSourcesPage> {
                 return;
               }
 
-              // Ensure keys sent to the C# API are PascalCase
+              // FIX 1: Ensure date is ALWAYS YYYY-MM-DD for C# backend
+              // If empty, default to today's date, formatted cleanly.
+              final String nextPayDate = nextPayDateController.text.isNotEmpty
+                  ? nextPayDateController.text
+                  : DateTime.now().toIso8601String().substring(0, 10);
+
               final data = {
                 'UserId': parsedUserId,
                 'SourceName': nameController.text,
                 'Amount': parsedAmount,
                 'PayFrequency': frequencyController.text,
-                // Ensure date is sent as a string (YYYY-MM-DD or ISO 8601)
-                'NextPayDate': nextPayDateController.text.isNotEmpty
-                    ? nextPayDateController.text
-                    : DateTime.now().toIso8601String(),
+                'NextPayDate': nextPayDate, // Use the fixed date string
               };
+
+              // FIX 2: Implement success flag logic to prevent crash
+              bool success = false;
 
               try {
                 if (source == null) {
                   await ApiService.addIncomeSource(data);
                   _showSnackBar('Income Source added successfully!');
+                  success = true;
                 } else {
                   if (incomeId != null) {
                     await ApiService.updateIncomeSource(incomeId, data);
                     _showSnackBar('Income Source updated successfully!');
+                    success = true;
                   }
                 }
               } catch (e) {
-                // Error Handling Fix: Show SnackBar on failure
                 _showSnackBar(
                   'Failed to save Income Source: ${e.toString()}',
                   isError: true,
                 );
               }
 
+              // Only pop and reload if the operation succeeded
               if (mounted) Navigator.pop(context);
-              setState(() => _loadIncomeSources());
+              if (success) {
+                setState(() => _loadIncomeSources());
+              }
             },
             child: const Text('Save'),
           ),
@@ -176,30 +182,32 @@ class _IncomeSourcesPageState extends State<IncomeSourcesPage> {
   }
 
   void _deleteIncomeSource(int id) async {
+    bool success = false;
     try {
       await ApiService.deleteIncomeSource(id);
       _showSnackBar('Income Source deleted successfully!');
+      success = true;
     } catch (e) {
-      // Error Handling Fix: Show SnackBar on failure
       _showSnackBar(
         'Failed to delete Income Source: ${e.toString()}',
         isError: true,
       );
     }
-    setState(() => _loadIncomeSources());
+    if (success) {
+      setState(() => _loadIncomeSources());
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Income Sources (REST API)')),
+      appBar: AppBar(title: const Text('Income Sources')),
       body: FutureBuilder<List<dynamic>>(
         future: _incomeSources,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           } else if (snapshot.hasError) {
-            // Display friendly error message
             return Center(
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
@@ -229,7 +237,6 @@ class _IncomeSourcesPageState extends State<IncomeSourcesPage> {
 
                 return ListTile(
                   title: Text(name),
-                  // Safely format and display pay date and frequency
                   subtitle: Text(
                     'Amount: \$${amount} | Freq: ${src['PayFrequency'] ?? src['payFrequency']} | Next: ${src['NextPayDate'] ?? src['nextPayDate'] ?? 'N/A'}',
                   ),
